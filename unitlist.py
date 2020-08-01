@@ -2,6 +2,7 @@
 # %%
 import pandas as pd
 from collections import Counter
+import numpy as np
 
 
 class Units(object):
@@ -45,10 +46,15 @@ class Units(object):
         Customers accept units between 100-200% of their requirement (hardcoded)
         '''
 
-        availabiliy = False
+        # --- stochastic element here
+        if np.random.rand() > p:
+            # booking is not made
+            return True  # Return true to allow booking attempts to continue
+
+        availability = False
         for i in self.available:
             if i >= size and i <= (2 * size) and self.available[i] > 0:
-                availabiliy = True
+                availability = True
 
                 # book unit: record end date, size
                 end = when + pd.Timedelta(f'{ndays}d')
@@ -59,7 +65,7 @@ class Units(object):
                 self.available[i] = self.available[i] - 1
                 break
 
-        return availabiliy
+        return availability
 
     def move_out(self, date):
         '''Automatically remove date from self.units_occupied, add rooms

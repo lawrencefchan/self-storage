@@ -24,7 +24,7 @@ Temporary assumptions (until model is improved):
 '''
 
 # %%
-
+import matplotlib.pyplot as plt
 import pandas as pd
 import unitlist as ul
 import json
@@ -59,8 +59,6 @@ start = df['Create Date'][0]
 end = df['Create Date'][9997]
 dr = pd.date_range(start=start, end=end)
 
-
-BREAK = False
 reservations = []
 
 for date in dr:
@@ -70,23 +68,16 @@ for date in dr:
     u.move_out(date)
 
     for row in d.itertuples():
-        if not u.attempt_booking(row._1, row._2, ndays=71):
-            print(date, 'NO MORE ROOM!!')
-            # BREAK = True
+        if not u.attempt_booking(row._1, row._2, p=0.1, ndays=590):
+            # print(date, 'NO MORE ROOM!!')
             break
-
-    # if BREAK:
-    #     break
 
     # --- number of units reserved
     reserved = sum({k: max_capacity[str(k)] - u.available[k] for k in u.available}.values())
     reservations += [reserved]
 
-# %% plot total reservations
+# --- %% plot total reservations
 
-import matplotlib.pyplot as plt
-
-# plt.plot(reservations)
 ax = pd.Series(data=reservations, index=dr).plot()
 ax.set_ylabel('Total no. reservations')
 
