@@ -20,6 +20,10 @@ Temporary assumptions (until model is improved):
     meets customer requirements. If full, move to the next size up.
 
 
+TODO:
+* check that u.all_units dictionary works
+* convert seeds to json files for easy loading
+* add moveout dates for seed occupancy
 
 '''
 
@@ -36,54 +40,65 @@ reload(ul)
 def get_data():
     df = pd.read_csv('DataSet2_clean.csv')
 
-    for i in [when, 'Create Date']:
+    for i in ['When do you require storage', 'Create Date']:
         df[i] = pd.to_datetime(df[i])
 
     return df
 
 
-with open(f'available_units_default.json') as json_file:
-    max_capacity = json.load(json_file)
+df = get_data()[['Room size required in sqmtrs (1)',
+                 'When do you require storage',
+                 'Create Date']] \
+        .dropna(how='any') \
+        .sort_values('Create Date')
 
-when = 'When do you require storage'
-size = 'Room size required in sqmtrs (1)'
 
-df = get_data()[[size, when, 'Create Date']] \
-    .dropna(how='any') \
-    .sort_values('Create Date')
+def run_simulation(**kawrgs):
+    u = ul.Units(start=start)
 
-# %%
-u = ul.Units()
+    reservations = []
+
+    for date in dr:
+        d = df[df['Create Date'] == date]
+
+        # display(d)
+        u.move_out(date)
+
+        for row in d.itertuples():
+            size = row._1
+            when = row._2
+            if not u.attempt_booking(size, when, p=0.2, ndays=590):
+                # print(date, 'NO MORE ROOM!!') 
+                break
+
+        # --- number of units reserved
+        reserved = sum({k: u.max_capacity[str(k)] - u.available[k] for k in u.available}.values())
+        reservations += [reserved]
+
+    return reservations
+
+
+# %% plot total reservations
+n = 100
 
 start = df['Create Date'][0]
 end = df['Create Date'][9997]
 dr = pd.date_range(start=start, end=end)
 
-reservations = []
+fig, ax = plt.subplots(figsize=(13, 8))
+for i in range(n):
+    reservations = run_simulation(start=start)
+    pd.Series(data=reservations, index=dr).plot(ax=ax, alpha=0.7)
 
-for date in dr:
-    d = df[df['Create Date'] == date]
+ax.set_ylabel('Total Occupancy')
+ax.set_title(f'Stochastic model (n={n})')
 
-    # display(d)
-    u.move_out(date)
-
-    for row in d.itertuples():
-        if not u.attempt_booking(row._1, row._2, p=0.1, ndays=590):
-            # print(date, 'NO MORE ROOM!!')
-            break
-
-    # --- number of units reserved
-    reserved = sum({k: max_capacity[str(k)] - u.available[k] for k in u.available}.values())
-    reservations += [reserved]
-
-# --- %% plot total reservations
-
-ax = pd.Series(data=reservations, index=dr).plot()
-ax.set_ylabel('Total no. reservations')
-
-
+plt.savefig(f'plots/total_occupancy_n={n}.png', dpi=300)
 
 # %% WIP: conversion rate (monthly)
+
+when = 'When do you require storage'
+size = 'Room size required in sqmtrs (1)'
 
 
 def calc_p_reservation(size, date):
