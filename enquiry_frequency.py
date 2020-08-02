@@ -34,7 +34,10 @@ df = pd.DataFrame(s)
 df['Day'] = df.index.strftime('%m-%d')
 df['Year'] = df.index.year
 
-df = pd.pivot_table(df,index='Day',columns='Year',values='Enquiry Frequency')
+df = pd.pivot_table(df,
+                    index='Day',
+                    columns='Year',
+                    values='Enquiry Frequency')
 df.index = pd.date_range('2020-01-01', '2020-12-31', freq='d')
 
 # %% plot daily
@@ -61,7 +64,11 @@ plt.savefig('plots/enquiryfreq_daily.png',
 # %% plot monthly
 month_df = df.resample('MS').sum()
 ax = month_df.plot()
-month_df.iloc[:, :3].mean(axis=1).plot(ax=ax, lw=5, c='k', alpha=0.7, label='Averge')
+month_df.iloc[:, :3].mean(axis=1).plot(ax=ax,
+                                       lw=5,
+                                       c='k',
+                                       alpha=0.7,
+                                       label='Averge')
 
 dr = pd.date_range('2020-01-01', '2020-12-31', freq='MS')
 ax.set_xticklabels([i[:3] for i in dr.month_name()])

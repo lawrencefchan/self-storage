@@ -7,7 +7,15 @@ import numpy as np
 
 
 class Units(object):
-    def __init__(self, start):
+    def __init__(self, start, seed='default', increase=None):
+        '''Parameters:
+        ----------
+        start: simulation start date (pd.Timestamp)
+
+        seed: unit occupancy at start of simulation. May be one of:
+            * default: load current occupancy from leases.csv
+            * empty: all rooms are empty
+        '''
 
         def get_all_units() -> dict:
             # returns {unitname: (total n. units, unit area)}
@@ -28,7 +36,7 @@ class Units(object):
 
             return all_units
 
-        def get_max_capacity() -> dict:
+        def init_max_capacity(self, increase=None) -> dict:
             '''temporary code that extracts max capacity from json file
             This may be updated to dynamically adjust to different scenarios
             '''
@@ -36,16 +44,43 @@ class Units(object):
             with open('available_units_default.json') as json_file:
                 max_capacity = json.load(json_file)
 
-            return max_capacity
+            if increase in max_capacity.keys():
+                max_capacity[increase] = max_capacity[increase] + 1
 
-        def get_seed():
+            self.max_capacity = max_capacity
+            return
+
+        def init_average_stay(self) -> dict:
+            '''Function to get average stay per unit size from json file'''
+
+            with open('average_stay.json') as json_file:
+                average_stay = json.load(json_file)
+
+            self.average_stay = average_stay
+            return
+
+        def init_seed(self, seed):
             with open('seed_occupancy_default.json') as json_file:
-                seed = json.load(json_file)
-            return seed
+                available = json.load(json_file)
+
+            if seed == 'default':
+                pass
+            elif seed == 'full':
+                available = {k: 0 for k, v in available.items()}
+            elif seed == 'empty':
+                available = {k: v for k, v in self.max_capacity.items()}
+            # elif type(seed) is float:
+            #     available = {k: int((1-seed) * v) for k, v in self.max_capacity.items()}
+
+            else:
+                raise KeyError('Unknown seed.')
+
+            self.available = available
+            return
 
         def init_moveout_dates(self, start, ndays=1000) -> dict:
-            '''This function will randomly assign unit moveout dates using some
-            distribution (?) to units currently occupied (on init).
+            '''This function will randomly assign unit moveout dates based on average
+            stay distribution to units currently occupied.
 
             It uses the difference between maximum capacity (self.max_capacity)
             and units currently available (self.available).
@@ -54,45 +89,38 @@ class Units(object):
             ----------
             start: simulation start date (pd.Timestamp)
 
-            ndays: [0, ndays] is the range of moveout dates generated
+            ndays: DEPRECATED [0, ndays] is the range of moveout dates generated
 
             Returns {moveout_date: [unit sizes with that moveout date]}
             '''
-            units = []
 
+            # 
+            units_occupied = {}
             for size, n_units in self.max_capacity.items():
-                # append size of each occupied unit to list
-                units += (n_units - self.available[size]) * [size]
+                s = self.average_stay[size]
+                for unit in range(n_units - self.available[size]):
+                    moveout_date = start + pd.Timedelta(np.random.randint(s), unit='D')
+                    units_occupied[moveout_date] = units_occupied.get(moveout_date, []) + [size]
 
-            # --- uniform distribution
-            days_occupied = np.random.randint(ndays, size=len(units))
+            # # --- uniform distribution
+            # days_occupied = np.random.randint(ndays, size=len(units))
+            # days_occupied = [start + pd.Timedelta(int(i), unit='D') for i in days_occupied]
 
-            # --- exponential distribution
-            # days_occupied = np.random.exponential(300, size=len(units))
+            # from collections import defaultdict
+            # # use defaultdict to append to keys not already in dict
+            # units_occupied = defaultdict(list)
+            # for k, v in zip(days_occupied, units):
+            #     units_occupied[k].append(v)
 
-            # --- lognormal distribution
-            # days_occupied = np.random.lognormal(6, 0.05, size=len(units))
-
-            # --- normal distribution
-            # days_occupied = np.random.normal(loc=500, scale=180, size=len(units))
-            # days_occupied = [_ if _ < 0 else _ for _ in days_occupied]
-
-            days_occupied = [start + pd.Timedelta(int(i), unit='D') for i in days_occupied]
-
-            from collections import defaultdict
-            # use defaultdict to append to keys not already in dict without errors
-            units_occupied = defaultdict(list)
-            for k, v in zip(days_occupied, units):
-                units_occupied[k].append(v)
-
-            return units_occupied
+            self.units_occupied = units_occupied
 
         # self.all_units = get_all_units()
-        self.max_capacity = get_max_capacity()
-        self.available = get_seed()
-        self.units_occupied = init_moveout_dates(self, start)
+        init_max_capacity(self, increase=increase)
+        init_average_stay(self)
+        init_seed(self, seed)
+        init_moveout_dates(self, start)
 
-    def attempt_booking(self, size, when, p=1, ndays=590) -> bool:
+    def attempt_booking(self, req_size, when, p=1, ndays=590) -> bool:
         '''
         Parameters:
         ----------
@@ -102,30 +130,43 @@ class Units(object):
 
         p: customer conversion rate
 
-        ndays: Length of storage lease duration
+        ndays: DEPRECATED: Length of storage lease duration
 
         Assumptions:
         -----------
-        Customers accept units between 100-200% of their requirement (hardcoded)
+        Customers accept units between 90-150% of their requirement(hardcoded)
         '''
 
         # --- stochastic element here
-        if np.random.rand() > p:
-            # booking is not made
-            return True  # Return true to allow booking attempts to continue
+        if np.random.rand() > p:  # booking is not made but return True to
+            return True           # allow booking attempts to continue
+
+        # self.debug = 0
 
         availability = False
-        for i in self.available:
-            if float(i) >= size and float(i) <= (2 * size) and self.available[i] > 0:
+        for size in self.available:
+            if (float(size) >= 0.9*req_size
+                    and float(size) <= 1.5*req_size
+                    and self.available[size] > 0):
                 availability = True
 
                 # book unit: record end date, size
-                end = when + pd.Timedelta(f'{ndays}d')
-                units_movingout = self.units_occupied.get(end, []) + [i]
+                avg_ndays = self.average_stay[size]
+                ndays = int(np.random.normal(avg_ndays, avg_ndays * 0.015))
+                # integer number of days needed otherwise move_out() wont work
+                # ndays = 590
+
+                end = when + pd.Timedelta(f'{int(ndays)}d')
+                units_movingout = self.units_occupied.get(end, []) + [size]
                 self.units_occupied[end] = units_movingout
 
                 # remove a room from available rooms
-                self.available[i] = self.available[i] - 1
+                self.available[size] = self.available[size] - 1
+
+                # if self.debug == 0:
+                #     print(i, self.available[i])
+                # self.debug = 1
+
                 break
 
         return availability
@@ -137,6 +178,7 @@ class Units(object):
         '''
         free_rooms = self.units_occupied.pop(date, [])
 
+        self.free_rooms = len(free_rooms)  # debuging
         # if len(free_rooms) > 0:
         #     print(len(free_rooms), 'units moved out today')
 
