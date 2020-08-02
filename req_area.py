@@ -14,13 +14,20 @@ import re
 df = pd.read_csv('DataSet2.csv')
 size = 'Room size required in sqmtrs (1)'
 
+# %% clean dimension formats
+
+'''Assumptions
+* Separate units don't matter as they are easy to create with temporary dividers
+* car/caravan size = 3.6m x 6m (21.6 msq)
+'''
+
 req_area = df[size].str.lower()
 
 # --- convert "locker" to 1m2
 req_area = req_area.apply(lambda x: 1 if x == 'locker' else x)
 
-# --- convert "car" to 8m2
-req_area = req_area.apply(lambda x: 12 if 'car' in str(x) else x)
+# --- convert "car" to 21.6m2
+req_area = req_area.apply(lambda x: 21.6 if 'car' in str(x) else x)
 
 # --- remove text (e.g. na/x/unknown etc.) if str doesn't contain a digit
 text = req_area.apply(lambda x: x if bool(re.search(r'\d', str(x))) else np.nan)
@@ -82,80 +89,61 @@ assert clean_df.shape[0] + text.isna().sum() == df.shape[0]
 
 df[size] = clean_df
 
-df.to_csv('DataSet2_clean.csv', index=False)
+# %% clean date required for storage
 
-# %%
-
-# df.head()
-# pd.to_datetime(df['When do you require storage'], format="%d/%m/%Y")
-
-# with pd.option_context('display.max_rows', 150, 'display.max_columns', 10):
-#     display(df['When do you require storage'].value_counts().head(150))
-
-dates = df['When do you require storage']  # .value_counts()
-dates.index = pd.to_datetime(dates.index, format="%d/%m/%Y")
-dates = dates.sort_index()
-
-ax = dates.resample('1D').mean().plot()
-# ax.get_xticklabels()
-
-dates
-
-
-
-# %%
-when = 'When do you require storage'
-dates = df[[when, 'Create Date']]
-
-dates[when] = [np.nan if '01/1969' in _ else _ for _ in dates[when]]
-
-for i in [when, 'Create Date']:
-    dates[i] = pd.to_datetime(dates[i], format="%d/%m/%Y")
-
-idx = dates[dates[when].dt.year == 1969].index
-
-dates['timedelta'] = dates[when] - dates['Create Date']
-
-
-# dates = dates.set_index(when) \
-#              .sort_index()  # 'Create Date'
-
-# dates[:'2015']
-
-# dates[dates['timedelta'] < pd.to_timedelta(0)]
-# dates[dates[when] - pd.to_datetime('2015-01-01') < pd.to_timedelta(0)]
-
-
-munge_dates = pd.DataFrame({'day': dates.loc[idx, when].dt.day,
-                            'month': dates.loc[idx, when].dt.month,
-                            'year': dates.loc[idx, 'Create Date'].dt.year})
-
-dates.loc[idx, when] = pd.to_datetime(munge_dates)
-
-
-dates = dates['timedelta'].value_counts()
-dates.index = dates.index.days
-
-dates = dates.sort_index(ascending=False)
-
-dates[1:].plot()
-
-
-
-# %%
-
-'''
-Assumptions
-* Separate units don't matter as they are easy to create with temporary dividers
-* car/caravan size = 12m2
+'''Assumptions
 * Dates entered before ____ are (invalid? assumed to be entered in 2016?)
 * Date requirements from Jan 1969 do not represent real datapoints (all NaN)
 * Date requirements from 1969 have correct month and day values (year is incorrect)
-
-
 '''
 
+when = 'When do you require storage'
+for i in [when, 'Create Date']:
+    df[i] = pd.to_datetime(df[i], format="%d/%m/%Y")
 
+# Date requirements from Jan 1969 do not represent real datapoints (set NaN)
+df[when][[True if pd.Timestamp('1969-01-31') > _ else False for _ in df[when]]]
 
-# [_ for _ in df[when] if '01/1969' in _]
-df[when][[True if '01/1969' in _ else False for _ in df[when]]]
+# correct year for entries with 1969
+idx = df[df[when].dt.year == 1969].index
+munge_dates = pd.DataFrame({'day': df.loc[idx, when].dt.day,
+                            'month': df.loc[idx, when].dt.month,
+                            'year': df.loc[idx, 'Create Date'].dt.year})
+df.loc[idx, when] = pd.to_datetime(munge_dates)
+
+# manually correct row 6836
+df.loc[6836, when] = pd.Timestamp('2018-04-01')
+
+# all other negative entries are considered erroneous and moved up to create date
+df['timedelta'] = df[when] - df['Create Date']
+idx = df['timedelta'] < pd.to_timedelta(0)
+df.loc[idx, when] = df.loc[idx, 'Create Date']
+
+# check that no more negative dates exist
+df['timedelta'] = df[when] - df['Create Date']
+assert df[df['timedelta'] < pd.to_timedelta(0)].shape[0] == 0
+
+df = df.drop('timedelta', axis=1)
+
+df.to_csv('DataSet2_clean.csv', index=False)
+
+# %% value counts frequency plot
+
+df['timedelta'] = df[when] - df['Create Date']
+
+counts = df['timedelta'].value_counts()
+counts.index = counts.index.days
+counts.index.name = 'days enquired in advance'
+counts.name = 'no. enquiries'
+
+counts = counts.sort_index(ascending=False)
+
+ax = counts.plot()
+ax.set_xlabel('Days enquired in advance')
+ax.set_ylabel('No. of enquiries')
+ax.grid()
+ax.set_title('Enquiry frequency distribution ',
+             loc='left',
+             fontdict={'fontsize': 20},
+             pad=10,
+             c='0.3')
