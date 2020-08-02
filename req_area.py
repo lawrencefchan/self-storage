@@ -128,6 +128,11 @@ df = df.drop('timedelta', axis=1)
 df.to_csv('DataSet2_clean.csv', index=False)
 
 # %% value counts frequency plot
+df = pd.read_csv('DataSet2_clean.csv')
+when = 'When do you require storage'
+
+for i in [when, 'Create Date']:
+    df[i] = pd.to_datetime(df[i])
 
 df['timedelta'] = df[when] - df['Create Date']
 
@@ -144,6 +149,11 @@ ax.set_ylabel('No. of enquiries')
 ax.grid()
 ax.set_title('Enquiry frequency distribution ',
              loc='left',
-             fontdict={'fontsize': 20},
+             fontdict={'fontsize': 16},
              pad=10,
              c='0.3')
+
+plt.savefig('plots/enquiryfreqdistribution.png',
+            dpi=300,
+            bbox_inches='tight',
+            transparent=False)

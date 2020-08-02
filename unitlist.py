@@ -43,7 +43,7 @@ class Units(object):
                 seed = json.load(json_file)
             return seed
 
-        def assign_moveout_dates(self, start, ndays=590) -> dict:
+        def init_moveout_dates(self, start, ndays=1000) -> dict:
             '''This function will randomly assign unit moveout dates using some
             distribution (?) to units currently occupied (on init).
 
@@ -54,6 +54,8 @@ class Units(object):
             ----------
             start: simulation start date (pd.Timestamp)
 
+            ndays: [0, ndays] is the range of moveout dates generated
+
             Returns {moveout_date: [unit sizes with that moveout date]}
             '''
             units = []
@@ -62,8 +64,20 @@ class Units(object):
                 # append size of each occupied unit to list
                 units += (n_units - self.available[size]) * [size]
 
+            # --- uniform distribution
             days_occupied = np.random.randint(ndays, size=len(units))
-            days_occupied = [start + pd.Timedelta(i, unit='D') for i in days_occupied]
+
+            # --- exponential distribution
+            # days_occupied = np.random.exponential(300, size=len(units))
+
+            # --- lognormal distribution
+            # days_occupied = np.random.lognormal(6, 0.05, size=len(units))
+
+            # --- normal distribution
+            # days_occupied = np.random.normal(loc=500, scale=180, size=len(units))
+            # days_occupied = [_ if _ < 0 else _ for _ in days_occupied]
+
+            days_occupied = [start + pd.Timedelta(int(i), unit='D') for i in days_occupied]
 
             from collections import defaultdict
             # use defaultdict to append to keys not already in dict without errors
@@ -76,7 +90,7 @@ class Units(object):
         # self.all_units = get_all_units()
         self.max_capacity = get_max_capacity()
         self.available = get_seed()
-        self.units_occupied = assign_moveout_dates(self, start)
+        self.units_occupied = init_moveout_dates(self, start)
 
     def attempt_booking(self, size, when, p=1, ndays=590) -> bool:
         '''
