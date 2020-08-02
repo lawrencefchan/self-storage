@@ -62,7 +62,7 @@ with open('seed_occupancy_default.json') as json_file:
     available = json.load(json_file)
 
 for increase in available.keys():
-    n = 10
+    n = 50
 
     sim_data = []
     t0 = datetime.now()
@@ -76,10 +76,10 @@ for increase in available.keys():
 
     sim_data = pd.DataFrame(sim_data, columns=dr).T
 
-    fig, ax = plt.subplots()  # figsize=(13, 8))
-    sim_data.plot(ax=ax, legend=False, alpha=0.6)
-    ax.set_ylabel('Total Occupancy')
-    ax.set_title(f'Stochastic model (n={n}), (ndays=365)')
+    # fig, ax = plt.subplots()  # figsize=(13, 8))
+    # sim_data.plot(ax=ax, legend=False, alpha=0.6)
+    # ax.set_ylabel('Total Occupancy')
+    # ax.set_title(f'Stochastic model (n={n}), (ndays=365)')
 
     saveas = f'increase_{increase}_scenario'
     sim_data.to_csv(f'{saveas}.csv')

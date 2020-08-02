@@ -45,7 +45,7 @@ df.index = pd.date_range('2020-01-01', '2020-12-01', freq='MS')
 
 # %%
 ax = df.plot()
-df.mean(axis=1).plot(ax=ax, lw=5, c='k', alpha=0.7, label='Averge')
+df.iloc[:, :3].mean(axis=1).plot(ax=ax, lw=5, c='k', alpha=0.7, label='Averge')
 ax.legend()
 
 ax.set_xticklabels(df.index.month_name())
@@ -60,7 +60,7 @@ ax.set_title('Conversion Rate by Year ',
              pad=10,
              c='0.3')
 
-plt.savefig('plots/conversionrate.png',
-            dpi=300,
-            bbox_inches='tight',
-            transparent=False)
+# plt.savefig('plots/conversionrate.png',
+#             dpi=300,
+#             bbox_inches='tight',
+#             transparent=False)
